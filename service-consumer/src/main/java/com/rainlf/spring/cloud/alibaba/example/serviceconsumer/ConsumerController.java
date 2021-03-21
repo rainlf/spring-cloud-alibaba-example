@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class ConsumerController {
 
-    @DubboReference(interfaceName = "hello.service", check = false)
+    @DubboReference(version = "1.0", check = false)
     private HelloService helloService;
 
     @GetMapping("")
