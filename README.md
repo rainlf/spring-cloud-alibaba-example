@@ -497,7 +497,7 @@ client.tm.degradeCheck=false
 client.tm.degradeCheckAllowTimes=10
 client.tm.degradeCheckPeriod=2000
 store.mode=db
-store.publicKey=
+# store.publicKey=
 store.file.dir=file_store/data
 store.file.maxBranchSessionSize=16384
 store.file.maxGlobalSessionSize=512
@@ -524,7 +524,7 @@ store.redis.maxConn=10
 store.redis.minConn=1
 store.redis.maxTotal=100
 store.redis.database=0
-store.redis.password=
+store.redis.password=redis
 store.redis.queryLimit=100
 server.recovery.committingRetryPeriod=1000
 server.recovery.asynCommittingRetryPeriod=1000
@@ -668,7 +668,7 @@ else
 fi
 ```
 
-将`config.txt`与`nacos-config.sh`放于同一目录下运行，向注册中心导入`seata`配置
+将`config.txt`与`nacos-config.sh`放于同一目录下运行，向注册中心导入`seata`配置，登陆`nacos`控制台后，也可在控制台上进行修改。
 
 ```shell
 sh nacos-config.sh -h localhost -p 8848 -g SEATA_GROUP  -u nacos -w nacos
@@ -738,5 +738,85 @@ CREATE TABLE IF NOT EXISTS `lock_table`
   DEFAULT CHARSET = utf8;
 ```
 
-完成后启动`seata`服务` sh seata-server.sh `。
+完成后启动`seata`服务`sh seata-server.sh -h 127.0.0.1 -p 8091 -m db`。
+
+### Seata客户端
+
+这里以简单的全局事务为例
+
+#### 依赖
+
+```xml
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
+</dependency>
+```
+
+#### 全局事务
+
+在需要全局事务的方法上加入`@GlobalTransactional`注解
+
+```java
+@RestController
+public class ConsumerController {
+
+    @DubboReference(version = "1.0", check = false)
+    private HelloService helloService;
+
+    @GlobalTransactional
+    @GetMapping("")
+    public String sayHello() {
+        return helloService.sayHello();
+    }
+
+    @GlobalTransactional
+    @GetMapping("/{id}")
+    public String sayHelloById(@PathVariable Integer id) {
+        if (id == 2) {
+            throw new RuntimeException("Exception for seata");
+        }
+        return helloService.sayHello();
+    }
+}
+```
+
+#### 配置
+
+```properties
+# Seata 这里与服务器端的service.vgroupMapping.<postfix>后缀保持一致，推荐使用${spring.application.name}
+spring.cloud.alibaba.seata.tx-service-group=my_test_tx_group
+seata.registry.type=nacos
+seata.registry.nacos.application=seata-server
+seata.registry.nacos.server-addr=10.2.62.5:8848
+seata.registry.nacos.group=SEATA_GROUP
+seata.registry.nacos.namespace=
+seata.registry.nacos.cluster=default
+seata.registry.nacos.username=nacos
+seata.config.type=nacos
+seata.config.nacos.server-addr=10.2.62.5:8848
+seata.config.nacos.group=SEATA_GROUP
+seata.config.nacos.namespace=
+seata.config.nacos.username=nacos
+seata.config.nacos.password=nacos
+
+logging.level.io.seata=debug
+```
+
+---
+
+```
+15:47:32.876  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : timeout=60000,transactionName=sayHelloById(java.lang.Integer),clientIp:10.32.51.27,vgroup:my_test_tx_group
+15:47:32.879  INFO --- [verHandlerThread_1_10_500] i.s.s.coordinator.DefaultCoordinator     : Begin new global transaction applicationId: service-consumer,transactionServiceGroup: my_test_tx_group, transactionName: sayHelloById(java.lang.Integer),timeout:60000,xid:10.2.62.5:8091:116927350970535936
+15:47:32.897  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : xid=10.2.62.5:8091:116927350970535936,extraData=null,clientIp:10.32.51.27,vgroup:my_test_tx_group
+15:47:33.450  INFO --- [      AsyncCommitting_1_1] io.seata.server.coordinator.DefaultCore  : Committing global transaction is successfully done, xid = 10.2.62.5:8091:116927350970535936.
+```
+
+```
+15:47:54.765  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : timeout=60000,transactionName=sayHelloById(java.lang.Integer),clientIp:10.32.51.27,vgroup:my_test_tx_group
+15:47:54.768  INFO --- [verHandlerThread_1_14_500] i.s.s.coordinator.DefaultCoordinator     : Begin new global transaction applicationId: service-consumer,transactionServiceGroup: my_test_tx_group, transactionName: sayHelloById(java.lang.Integer),timeout:60000,xid:10.2.62.5:8091:116927442779656192
+15:47:54.790  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : xid=10.2.62.5:8091:116927442779656192,extraData=null,clientIp:10.32.51.27,vgroup:my_test_tx_group
+15:47:54.796  INFO --- [verHandlerThread_1_15_500] io.seata.server.coordinator.DefaultCore  : Rollback global transaction successfully, xid = 10.2.62.5:8091:116927442779656192.
+
+```
 
