@@ -2,7 +2,7 @@
 
 在微服务架构中，`Spring Cloud Alibaba`提供了一些优秀的组件来解决微服务场景下的问题，例如`PRC调用`、服务注册发现、配置管理、流控容错、分布式事务等。本项目以`Spring Cloud Alibaba`提供的组件为基础，简单介绍它们在微服务场景下的应用。
 
-## 环境
+## 开发环境
 
 -   `java 8`
 -   `spring boot 2.3.7.RELEASE`
@@ -760,7 +760,6 @@ CREATE TABLE IF NOT EXISTS `lock_table`
 ```java
 @RestController
 public class ConsumerController {
-
     @DubboReference(version = "1.0", check = false)
     private HelloService helloService;
 
@@ -803,7 +802,11 @@ seata.config.nacos.password=nacos
 logging.level.io.seata=debug
 ```
 
----
+#### 服务端日志
+
+通过服务端日志可以看到分布式事务成功和回滚的具体日志如下，其中`xid`为全局事务的ID
+
+成功时
 
 ```
 15:47:32.876  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : timeout=60000,transactionName=sayHelloById(java.lang.Integer),clientIp:10.32.51.27,vgroup:my_test_tx_group
@@ -811,12 +814,56 @@ logging.level.io.seata=debug
 15:47:32.897  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : xid=10.2.62.5:8091:116927350970535936,extraData=null,clientIp:10.32.51.27,vgroup:my_test_tx_group
 15:47:33.450  INFO --- [      AsyncCommitting_1_1] io.seata.server.coordinator.DefaultCore  : Committing global transaction is successfully done, xid = 10.2.62.5:8091:116927350970535936.
 ```
-
+失败时
 ```
 15:47:54.765  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : timeout=60000,transactionName=sayHelloById(java.lang.Integer),clientIp:10.32.51.27,vgroup:my_test_tx_group
 15:47:54.768  INFO --- [verHandlerThread_1_14_500] i.s.s.coordinator.DefaultCoordinator     : Begin new global transaction applicationId: service-consumer,transactionServiceGroup: my_test_tx_group, transactionName: sayHelloById(java.lang.Integer),timeout:60000,xid:10.2.62.5:8091:116927442779656192
 15:47:54.790  INFO --- [     batchLoggerPrint_1_1] i.s.c.r.p.server.BatchLogHandler         : xid=10.2.62.5:8091:116927442779656192,extraData=null,clientIp:10.32.51.27,vgroup:my_test_tx_group
 15:47:54.796  INFO --- [verHandlerThread_1_15_500] io.seata.server.coordinator.DefaultCore  : Rollback global transaction successfully, xid = 10.2.62.5:8091:116927442779656192.
-
 ```
 
+##  流控防护
+
+随着微服务体系的增加，服务和服务之间的稳定性变得越来越重要。`Sentinel`以流量为切入点，从流量控制、熔断降级、系统负载保护等多个维度保护服务的稳定性。 
+
+`Sentinel`具有以下特征:
+
+- 丰富的应用场景：`Sentinel`承接了阿里巴巴近 10 年的双十一大促流量的核心场景，例如秒杀（即突发流量控制在系统容量可以承受的范围）、消息削峰填谷、集群流量控制、实时熔断下游不可用应用等。
+- 完备的实时监控：`Sentinel`同时提供实时的监控功能。您可以在控制台中看到接入应用的单台机器秒级数据，甚至 500 台以下规模的集群的汇总运行情况。
+- 广泛的开源生态：`Sentinel`提供开箱即用的与其它开源框架/库的整合模块，例如与`Spring Cloud`、`Dubbo`、`gRPC`的整合。您只需要引入相应的依赖并进行简单的配置即可快速地接入`Sentinel`。
+- 完善的 SPI 扩展点：`Sentinel`提供简单易用、完善的`SPI`扩展接口。您可以通过实现扩展接口来快速地定制逻辑。例如定制规则管理、适配动态数据源等。
+
+`Sentinel`分为两个部分:
+
+-   核心库（`Java`客户端）不依赖任何框架/库，能够运行于所有`Java`运行时环境，同时对`Dubbo`/`Spring Cloud`等框架也有较好的支持。
+-   控制台（`Dashboard`）基于`Spring Boot`开发，打包后可以直接运行，不需要额外的`Tomcat`等应用容器。
+
+### 搭建Sentinel控制台
+
+从[release页面](https://github.com/alibaba/Sentinel/releases)获取最新软件包，运行如下命令启动控制台。
+
+```shell
+java -Dserver.port=8080 -Dcsp.sentinel.dashboard.server=localhost:8080 -Dproject.name=sentinel-dashboard -jar sentinel-dashboard-1.8.1.jar
+```
+
+### 客户端接入
+
+依赖
+
+```xml
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+</dependency>
+```
+
+配置
+
+```properties
+# Sentinel
+spring.cloud.sentinel.transport.dashboard=localhost:8080
+```
+
+登陆http://localhost:8080 默认用户名密码为：`sentinel`:`sentinel`，可以看到服务的实时监控与流控配置等信息。
+
+![1616406364003](README/1616406364003.png)
